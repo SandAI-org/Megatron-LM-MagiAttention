@@ -17,7 +17,8 @@ from megatron.core.transformer.enums import ModelType
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
-
+from magi_attention.dist_attn_runtime_mgr import DistAttnRuntimeKey
+from magi_attention.api import undispatch
 
 class GPTModel(LanguageModule):
     """GPT Transformer language model.
@@ -203,6 +204,7 @@ class GPTModel(LanguageModule):
         packed_seq_params: PackedSeqParams = None,
         extra_block_kwargs: dict = None,
         runtime_gather_output: Optional[bool] = None,
+        magi_attention_key: DistAttnRuntimeKey = None,
     ) -> Tensor:
         """Forward function of the GPT Model This function passes the input tensors
         through the embedding layer, and then the decoeder and finally into the post
@@ -246,6 +248,7 @@ class GPTModel(LanguageModule):
                     rotary_seq_len,
                     packed_seq=packed_seq_params is not None
                     and packed_seq_params.qkv_format == 'thd',
+                    magi_attention_key=magi_attention_key,
                 )
         if (
             (self.config.enable_cuda_graph or self.config.flash_decode)
@@ -270,6 +273,7 @@ class GPTModel(LanguageModule):
             rotary_pos_sin=rotary_pos_sin,
             packed_seq_params=packed_seq_params,
             sequence_len_offset=sequence_len_offset,
+            magi_attention_key=magi_attention_key,
             **(extra_block_kwargs or {}),
         )
 
@@ -283,6 +287,14 @@ class GPTModel(LanguageModule):
         logits, _ = self.output_layer(
             hidden_states, weight=output_weight, runtime_gather_output=runtime_gather_output
         )
+        #print(f"{logits.shape=}")
+        # do undispatch here
+        
+        if magi_attention_key is not None:
+            logits = undispatch(
+                logits, magi_attention_key
+            ) 
+        #print(f"{logits.shape=}")
 
         if has_config_logger_enabled(self.config):
             payload = OrderedDict(

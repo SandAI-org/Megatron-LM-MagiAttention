@@ -912,7 +912,9 @@ def _load_base_checkpoint(
     else:
         checkpoint_name = get_checkpoint_name(load_dir, iteration, release, return_base_dir=False)
     try:
-        state_dict = torch.load(checkpoint_name, map_location='cpu')
+        #state_dict = torch.load(checkpoint_name, map_location='cpu')
+        state_dict = torch.load(checkpoint_name, map_location='cpu', weights_only=False)
+
     except ModuleNotFoundError:
         from megatron.legacy.fp16_deprecated import loss_scaler
 
@@ -1011,8 +1013,8 @@ def load_args_from_checkpoint(
     _set_arg('position_embedding_type', force=True)
     _set_arg('add_position_embedding', force=True)
     _set_arg('use_rotary_position_embeddings', force=True)
-    _set_arg('rotary_base', force=True)
-    _set_arg('rotary_percent', force=True)
+    #_set_arg('rotary_base', force=True)
+    #_set_arg('rotary_percent', force=True)
     _set_arg('rotary_interleaved', force=True)
     _set_arg('add_bias_linear', force=True)
     _set_arg('add_qkv_bias', force=True)
@@ -1022,8 +1024,8 @@ def load_args_from_checkpoint(
     _set_arg('apply_layernorm_1p', force=True)
     _set_arg('normalization', force=True)
     _set_arg('apply_query_key_layer_scaling', force=True)
-    _set_arg('attention_dropout', force=True)
-    _set_arg('hidden_dropout', force=True)
+    #_set_arg('attention_dropout', force=True)
+    #_set_arg('hidden_dropout', force=True)
 
     _set_arg('hybrid_override_pattern', force=True)
     _set_arg('spec', force=True)

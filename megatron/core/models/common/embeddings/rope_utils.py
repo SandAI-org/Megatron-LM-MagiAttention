@@ -66,6 +66,21 @@ def get_pos_emb_on_this_cp_rank(pos_emb: Tensor, seq_dim: int) -> Tensor:
     return pos_emb
 
 
+def get_pos_emb_on_this_cp_rank_magi(pos_emb: Tensor, magi_attention_key) -> Tensor:
+    """Get the position embedding on the current context parallel rank(seq_dim=0).
+
+    Args:
+        pos_emb (Tensor): Positional embedding tensor
+        magi_attention_key: key to get cp_idx
+    """
+    from magi_attention.api import get_position_ids
+
+    cp_idx = get_position_ids(magi_attention_key)
+    pos_emb = pos_emb[cp_idx]
+
+    return pos_emb
+
+
 def _rotate_half(x: Tensor, rotary_interleaved: bool) -> Tensor:
     """Change sign so the last dimension becomes [-odd, +even]
 

@@ -24,6 +24,7 @@ from megatron.core.models.common.embeddings.rope_utils import (  # for backward 
     _rotate_half,
     apply_rotary_pos_emb,
     get_pos_emb_on_this_cp_rank,
+    get_pos_emb_on_this_cp_rank_magi,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,7 +139,7 @@ class RotaryEmbedding(nn.Module):
         return cos, sin
 
     @lru_cache(maxsize=32)
-    def forward(self, max_seq_len: int, offset: int = 0, packed_seq: bool = False) -> Tensor:
+    def forward(self, max_seq_len: int, offset: int = 0, packed_seq: bool = False, magi_attention_key = None) -> Tensor:
         """Forward pass of RoPE embedding.
 
         Args:
@@ -167,7 +168,8 @@ class RotaryEmbedding(nn.Module):
         if parallel_state.get_context_parallel_world_size() > 1 and not packed_seq:
             # slice rotary_pos_emb along sequence dimension and select the parition of the current
             # CP rank
-            emb = get_pos_emb_on_this_cp_rank(emb, 0)
+            #emb = get_pos_emb_on_this_cp_rank(emb, 0)
+            emb = get_pos_emb_on_this_cp_rank_magi(emb, magi_attention_key)
         return emb
 
     def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
