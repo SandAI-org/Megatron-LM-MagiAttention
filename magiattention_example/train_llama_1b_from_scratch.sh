@@ -5,8 +5,8 @@
 
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
-context_parallel_size=$1
-GPUS_PER_NODE=$context_parallel_size
+context_parallel_size=4
+GPUS_PER_NODE=8
 # Change for multinode config
 MASTER_ADDR=localhost
 MASTER_PORT=6000
@@ -21,9 +21,9 @@ WORLD_SIZE=$(($GPUS_PER_NODE*$NUM_NODES))
 #DATA_PATH=$5 #<Specify path and file prefix>_text_document
 
 # change your checkpoint_path and logger path
-#CHECKPOINT_LOAD_PATH=../checkpoints/llama-3.2-1b
+CHECKPOINT_LOAD_PATH=../checkpoints/Llama-3.2-1b-scratch
 CHECKPOINT_SAVE_PATH=../checkpoints/Llama-3.2-1b-scratch
-TENSORBOARD_LOGS_PATH=../logger/magi_v0.11/Llama-3.2-1b/scratch/cp_$context_parallel_size
+TENSORBOARD_LOGS_PATH=../logger/magi_v0.11/Llama-3.2-1b/scratch/50_cp_$context_parallel_size
 TOKENIZER_MODEL=../checkpoints/Llama-3.2-1b
 
 #TENSORBOARD_LOGS_PATH=../logger/megatron_v0.11/const_lr/cp_$context_parallel_size
@@ -60,8 +60,8 @@ GPT_MODEL_ARGS=(
 
 TRAINING_ARGS=(
     --micro-batch-size 1 
-    --global-batch-size 1
-    --train-iters 1000
+    --global-batch-size 2
+    --train-iters 100
     --weight-decay 0.1 
     --adam-beta1 0.9 
     --adam-beta2 0.95 
@@ -74,11 +74,12 @@ TRAINING_ARGS=(
     --min-lr 6.0e-6
     --lr-warmup-fraction .001
     --lr-decay-iters 430000 
-    --transformer-impl local
+    #--transformer-impl local   use te by default
     --exit-on-missing-checkpoint
     --use-checkpoint-args
-    --no-load-optim
-    --no-load-rng
+    #--no-load-optim
+    #--no-load-rng
+    --use-checkpoint-opt_param-scheduler
     --untie-embeddings-and-output-weights
     --normalization RMSNorm
     --position-embedding-type rope
@@ -103,8 +104,8 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --log-interval 1
-    --save-interval 10000 
+    --log-interval 10
+    --save-interval 50
     --eval-interval 1000 
     --save $CHECKPOINT_SAVE_PATH 
     #--load $CHECKPOINT_LOAD_PATH
@@ -119,4 +120,4 @@ torchrun ${DISTRIBUTED_ARGS[@]} pretrain_llama.py \
     ${DATA_ARGS[@]} \
     ${EVAL_AND_LOGGING_ARGS[@]}
 
-rm -rf $CHECKPOINT_SAVE_PATH
+#rm -rf $CHECKPOINT_SAVE_PATH

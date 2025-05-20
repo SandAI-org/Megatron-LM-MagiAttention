@@ -8,7 +8,7 @@ run prepare_llama-3.2-1b_checkpoint.sh to download checkpoint from modelscope an
 ### prepare data
 We use openwebtext(https://huggingface.co/datasets/Skylion007/openwebtext) to continue training llama-3.2-1b.
 
-You can run prepare_data.sh to download data from huggingface and preprocess data.
+You can run prepare_data.sh int ./data to download data from huggingface and preprocess data.
 
 ### intergrate with magiattention
 We intergrate magiattention with te and local transformer inplementation.
