@@ -1,38 +1,24 @@
 #!/bin/bash
 
-# Runs the "175B" parameter model
-#rm -rf checkpoint/
-
+# train from megatron checkpoint(with optimizer and lr scheduler)
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
+[ -z "$RANK" ] && RANK=0
+[ -z "$WORLD_SIZE" ] && WORLD_SIZE=1
+[ -z "$MASTER_ADDR" ] && MASTER_ADDR=127.0.0.1
+[ -z "$MASTER_PORT" ] && MASTER_PORT=9010
+[ -z "$NUM_NODES" ] && NUM_NODES=1
 context_parallel_size=$1
-GPUS_PER_NODE=$context_parallel_size
-# Change for multinode config
-MASTER_ADDR=localhost
-MASTER_PORT=6000
-NUM_NODES=1
-NODE_RANK=0
-WORLD_SIZE=$(($GPUS_PER_NODE*$NUM_NODES))
-
-#CHECKPOINT_PATH=$1 #<Specify path>
-#TENSORBOARD_LOGS_PATH=$2 #<Specify path>
-#VOCAB_FILE=$3 #<Specify path to file>/gpt2-vocab.json
-#MERGE_FILE=$4 #<Specify path to file>/gpt2-merges.txt
-#DATA_PATH=$5 #<Specify path and file prefix>_text_document
+GPUS_PER_NODE=8
 
 # change your checkpoint_path and logger path
-CHECKPOINT_LOAD_PATH=../checkpoints/Llama-3.2-1b-new
-CHECKPOINT_SAVE_PATH=../checkpoints/Llama-3.2-1b-new_
-TENSORBOARD_LOGS_PATH=../logger/magi_v0.11/Llama-3.2-1b/test_resume/train_resume_from_50_step/
-TOKENIZER_MODEL=../checkpoints/Llama-3.2-1b
+CHECKPOINT_LOAD_PATH
+CHECKPOINT_SAVE_PATH=/your_checkpoint_path
+TENSORBOARD_LOGS_PATH=/your_log_path
+TOKENIZER_MODEL=./checkpoints/Llama-3.2-1b
+rm -rf $TENSORBOARD_LOGS_PATH
 
-#TENSORBOARD_LOGS_PATH=../logger/megatron_v0.11/const_lr/cp_$context_parallel_size
-#rm -rf $TENSORBOARD_LOGS_PATH
-
-#VOCAB_FILE=../prepare_dataset/gpt2-vocab.json
-#MERGE_FILE=../prepare_dataset/gpt2-merges.txt
-DATA_PATH=../prepare_dataset/llama_openwebtext_text_document
-
+DATA_PATH=./data/llama_openwebtext_text_document
 
 DISTRIBUTED_ARGS=(
     --nproc_per_node $GPUS_PER_NODE 
@@ -77,8 +63,6 @@ TRAINING_ARGS=(
     --lr-warmup-fraction .001
     --lr-decay-iters 430000 
     --exit-on-missing-checkpoint
-    #--no-load-optim
-    #--no-load-rng
     --untie-embeddings-and-output-weights
     --normalization RMSNorm
     --position-embedding-type rope
@@ -98,8 +82,6 @@ DATA_ARGS=(
     --data-path $DATA_PATH
     --tokenizer-type HuggingFaceTokenizer
     --tokenizer-model ${TOKENIZER_MODEL}
-    #--vocab-file $VOCAB_FILE 
-    #--merge-file $MERGE_FILE 
     --split 94,5,1
 )
 
@@ -119,5 +101,3 @@ torchrun ${DISTRIBUTED_ARGS[@]} pretrain_llama.py \
     ${MODEL_PARALLEL_ARGS[@]} \
     ${DATA_ARGS[@]} \
     ${EVAL_AND_LOGGING_ARGS[@]}
-
-#rm -rf $CHECKPOINT_SAVE_PATH

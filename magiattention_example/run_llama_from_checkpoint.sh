@@ -1,37 +1,23 @@
 #!/bin/bash
 
-# Runs the "175B" parameter model
-#rm -rf checkpoint/
-
+# load checkpoint converted from huggingface(without optimzier and lr scheduler).
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
+[ -z "$RANK" ] && RANK=0
+[ -z "$WORLD_SIZE" ] && WORLD_SIZE=1
+[ -z "$MASTER_ADDR" ] && MASTER_ADDR=127.0.0.1
+[ -z "$MASTER_PORT" ] && MASTER_PORT=9010
+[ -z "$NUM_NODES" ] && NUM_NODES=1
 context_parallel_size=$1
-GPUS_PER_NODE=$context_parallel_size
-# Change for multinode config
-MASTER_ADDR=localhost
-MASTER_PORT=6000
-NUM_NODES=1
-NODE_RANK=0
-WORLD_SIZE=$(($GPUS_PER_NODE*$NUM_NODES))
+GPUS_PER_NODE=8
 
-#CHECKPOINT_PATH=$1 #<Specify path>
-#TENSORBOARD_LOGS_PATH=$2 #<Specify path>
-#VOCAB_FILE=$3 #<Specify path to file>/gpt2-vocab.json
-#MERGE_FILE=$4 #<Specify path to file>/gpt2-merges.txt
-#DATA_PATH=$5 #<Specify path and file prefix>_text_document
+CHECKPOINT_LOAD_PATH=/your_load_checkpoint_path
+CHECKPOINT_SAVE_PATH=/your_save_checkpoint_path
+TENSORBOARD_LOGS_PATH=/your_log_path
+TOKENIZER_MODEL=./checkpoints/Llama-3.2-1b
+rm -rf $TENSORBOARD_LOGS_PATH
 
-# change your checkpoint_path and logger path
-CHECKPOINT_LOAD_PATH=../checkpoints/llama-3.2-1b
-CHECKPOINT_SAVE_PATH=../checkpoints/Llama-3.2-1b-new
-TENSORBOARD_LOGS_PATH=../logger/magi_v0.11/Llama-3.2-1b/fix_rope/magi_cp_$context_parallel_size
-TOKENIZER_MODEL=../checkpoints/Llama-3.2-1b
-
-#TENSORBOARD_LOGS_PATH=../logger/megatron_v0.11/const_lr/cp_$context_parallel_size
-#rm -rf $TENSORBOARD_LOGS_PATH
-
-#VOCAB_FILE=../prepare_dataset/gpt2-vocab.json
-#MERGE_FILE=../prepare_dataset/gpt2-merges.txt
-DATA_PATH=../prepare_dataset/llama_openwebtext_text_document
+DATA_PATH=./data/llama_openwebtext_text_document
 
 
 DISTRIBUTED_ARGS=(
@@ -97,8 +83,6 @@ DATA_ARGS=(
     --data-path $DATA_PATH
     --tokenizer-type HuggingFaceTokenizer
     --tokenizer-model ${TOKENIZER_MODEL}
-    #--vocab-file $VOCAB_FILE 
-    #--merge-file $MERGE_FILE 
     --split 94,5,1
 )
 
