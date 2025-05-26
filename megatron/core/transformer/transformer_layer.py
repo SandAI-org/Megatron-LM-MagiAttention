@@ -381,7 +381,6 @@ class TransformerLayer(MegatronModule, BaseTransformerLayer):
                 context (Tensor): Updated context tensor if cross-attention is used,
                 otherwise None.
         """
-        #print(f"{hidden_states.shape=}")
         # Residual connection.
         residual = hidden_states
 

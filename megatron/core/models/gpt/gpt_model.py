@@ -287,14 +287,12 @@ class GPTModel(LanguageModule):
         logits, _ = self.output_layer(
             hidden_states, weight=output_weight, runtime_gather_output=runtime_gather_output
         )
-        #print(f"{logits.shape=}")
-        # do undispatch here
-        
+
+        # undispatch logits here        
         if magi_attention_key is not None:
             logits = undispatch(
                 logits, magi_attention_key
             ) 
-        #print(f"{logits.shape=}")
 
         if has_config_logger_enabled(self.config):
             payload = OrderedDict(

@@ -170,10 +170,9 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
     loss_mask = loss_mask.view(-1).float()
     total_tokens = loss_mask.sum()
     loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), total_tokens.view(1)])
-    print(f"loss before cp: {loss=}")
+
     if args.context_parallel_size > 1:
         torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
-    print(f"loss after cp: {loss=}")
     
     # Check individual rank losses are not NaN prior to DP all-reduce.
     rerun_state_machine = get_rerun_state_machine()

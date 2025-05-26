@@ -151,14 +151,11 @@ def prepare_data(input, label):
     config = core_transformer_config_from_args(args)
     
     head_dim = config.hidden_size // config.num_attention_heads
-    #print(input)
     micro_batch_size = input.size(0)
     seqlen = input.size(1)
 
-    # squash
-    #print(f"input before squash: {input.shape=}")
+    # squash batch dim.
     input = squash_batch_dim(input)
-    #print(f"input after squash: {input.shape=}")
     pad_size, _ = compute_pad_size(input.size(0), args.context_parallel_size, head_dim)
 
     label = squash_batch_dim(label)
@@ -190,7 +187,7 @@ def prepare_magi_attention(input, cu_seqlens_q, cu_seqlens_k, pad_size, cp_group
     config = core_transformer_config_from_args(args)
     
     head_dim = config.hidden_size // config.num_attention_heads
-    # you can also use fa_varlen-like varlen dispatch interface directly
+    # dispatch input data to each rank and get key.
     x_padded, dist_attn_runtime_key = magi_attn_varlen_dispatch(
         input,
         cu_seqlens_q,
@@ -198,13 +195,14 @@ def prepare_magi_attention(input, cu_seqlens_q, cu_seqlens_k, pad_size, cp_group
         head_dim=head_dim,
         pad_size=pad_size,
         cp_group=cp_group,
-        causal=True,   # how to get causal type?
+        causal=True,
         dist_attn_config=dist_attn_config,
     )
 
     return x_padded, dist_attn_runtime_key
 
 def dispatch_along_cp_rank(batch: Dict[str, Any]):
+    """slice data along sequence dimension for context parallelisms and prepare magiattention key."""
     tokens = batch['tokens']
     labels = batch['labels']
 
@@ -212,8 +210,12 @@ def dispatch_along_cp_rank(batch: Dict[str, Any]):
     input, dist_attn_runtime_key = prepare_magi_attention(
                 tokens, cu_seqlens_q, cu_seqlens_k, pad_size, mpu.get_context_parallel_group()
             )
-    input = torch.unsqueeze(input, dim=0)
+    input = torch.unsqueeze(input, dim=0)  # Megatron need batch_dim for input.
+    labels = torch.unsqueeze(labels, dim=0)
+    
+    # update batch
     batch['tokens'] = input
+    batch['labels'] = labels
     batch['key'] = dist_attn_runtime_key
     batch['position_ids'] = get_position_ids(dist_attn_runtime_key)
 
@@ -231,7 +233,6 @@ def get_batch(data_iterator):
 
     # slice batch along sequence dimension for context parallelism
     # do dispatch here
-    #batch = get_batch_on_this_cp_rank(batch)
     batch = dispatch_along_cp_rank(batch)
 
     return batch.values()
@@ -260,9 +261,6 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
     loss_mask = loss_mask.view(-1).float()
     total_tokens = loss_mask.sum()
     loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), total_tokens.view(1)])
-
-    #if args.context_parallel_size > 1:
-    #torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
 
     # Check individual rank losses are not NaN prior to DP all-reduce.
     rerun_state_machine = get_rerun_state_machine()
@@ -310,9 +308,7 @@ def forward_step(data_iterator, model: GPTModel):
     with stimer(bdata=True):
         tokens, labels, loss_mask, attention_mask, position_ids, key = get_batch(
             data_iterator)
-    #print(f"tokens: {tokens.shape=}")
-    #print(f"{key=}")
-    #print(f"{position_ids=}")
+
     timers('batch-generator').stop()
 
     with stimer:
