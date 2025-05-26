@@ -5,7 +5,7 @@ We provide an example for you to train llama-3-1b with magiattention with differ
 You can refer to the shell in dir magiattention/checkpoints/ and
 run `prepare_llama-3.2-1b_checkpoint.sh` to download checkpoint from modelscope and convert checkpoint from huggingface format to megatron format.
 
-tokenizer.model is necessary for training from scratch.
+tokenizer.model is necessary for trainingcle from scratch.
 
 ### Prepare data
 We use openwebtext(https://huggingface.co/datasets/Skylion007/openwebtext) dataset.
