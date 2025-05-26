@@ -4,7 +4,7 @@ We provide an example for you to train llama-1b model from scratch with differen
 ### prepare checkpoints
 You can refer to the shell in dir ./checkpoints to download checkpoint in huggingface format and convert checkpoint to megatron format.
 
-This is not necessary for training from scratch(tokenizer.model is needed).
+tokenizer.model is needed for training from scratch
 
 ### prepare data
 We use openwebtext(https://huggingface.co/datasets/Skylion007/openwebtext) as our dataset.
@@ -12,11 +12,11 @@ We use openwebtext(https://huggingface.co/datasets/Skylion007/openwebtext) as ou
 You can run refer to shell in dir ./data to download data from huggingface and preprocess data.
 
 ### Experiments
-You can run train_llama_1b_from_scratch.sh to train model from scratch with different megatron cp size.
-You can also run run_llama_from_checkpoint.sh to continue train model from checkpoint with different megatron cp size.
+You can run `./magiattention_example/train_llama_1b_from_scratch.sh` to train model from scratch with different megatron cp size.
+You can also run `./magiattention_example/run_llama_from_checkpoint.sh` to continue train model from checkpoint with different megatron cp size.
 
 ### Experiments
- You can run ./magiattention_example/train_llama_1b_from_scratch.sh to train llama-1b from scratch with magiattention.
+ You can run `./magiattention_example/train_llama_1b_from_scratch.sh` to train llama-1b from scratch with magiattention.
  training_settings:
  - model-size: llama-1b
      - num-layers: 16
