@@ -7,7 +7,7 @@ from functools import partial
 from contextlib import nullcontext
 import inspect
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Dict, Any
 from megatron.training import get_args
 from megatron.training import print_rank_0
 from megatron.training import get_timers
@@ -35,6 +35,21 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,
 )
+from magi_attention.api import magi_attn_varlen_dispatch, undispatch, get_position_ids
+from magi_attention.common.enum import AttnOverlapMode
+from magi_attention.config import (
+    DispatchConfig,
+    DistAttnConfig,
+    MinHeapDispatchAlg,
+    OverlapConfig,
+    UniformOverlapAlg,
+)
+from magi_attention.api import (
+    compute_pad_size,
+    full_attention_to_varlen_attention,
+    squash_batch_dim,
+)
+from magi_attention.dist_attn_runtime_mgr import DistAttnRuntimeKey
 
 
 stimer = StragglerDetector()
@@ -130,6 +145,81 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
 
     return model
 
+def prepare_data(input, label):
+    # input with shape [b, s]
+    args = get_args()
+    config = core_transformer_config_from_args(args)
+    
+    head_dim = config.hidden_size // config.num_attention_heads
+    micro_batch_size = input.size(0)
+    seqlen = input.size(1)
+
+    # squash batch dim.
+    input = squash_batch_dim(input)
+    pad_size, _ = compute_pad_size(input.size(0), args.context_parallel_size, head_dim)
+
+    label = squash_batch_dim(label)
+
+    cu_seqlens_q, cu_seqlens_k = full_attention_to_varlen_attention(
+        micro_batch_size, seqlen
+    )
+    return input, label, cu_seqlens_q, cu_seqlens_k, pad_size
+
+def prepare_magi_attention(input, cu_seqlens_q, cu_seqlens_k, pad_size, cp_group):
+    dist_attn_config = DistAttnConfig(
+        dispatch_config=DispatchConfig(alg=MinHeapDispatchAlg()),
+        overlap_config=OverlapConfig(
+            enable=True,
+            mode=AttnOverlapMode.STATIC,
+            degree=4,
+            min_chunk_size=13,
+            max_num_chunks=52,
+            alg=UniformOverlapAlg(
+                random_costs=True,
+                random_seed=42,
+            ),
+        ),
+        high_bandwith_domain_size=8,
+        deterministic=False,
+    )
+
+    args = get_args()
+    config = core_transformer_config_from_args(args)
+    
+    head_dim = config.hidden_size // config.num_attention_heads
+    # dispatch input data to each rank and get key.
+    x_padded, dist_attn_runtime_key = magi_attn_varlen_dispatch(
+        input,
+        cu_seqlens_q,
+        cu_seqlens_k,
+        head_dim=head_dim,
+        pad_size=pad_size,
+        cp_group=cp_group,
+        causal=True,
+        dist_attn_config=dist_attn_config,
+    )
+
+    return x_padded, dist_attn_runtime_key
+
+def dispatch_along_cp_rank(batch: Dict[str, Any]):
+    """slice data along sequence dimension for context parallelisms and prepare magiattention key."""
+    tokens = batch['tokens']
+    labels = batch['labels']
+
+    tokens, labels, cu_seqlens_q, cu_seqlens_k, pad_size = prepare_data(tokens, labels)
+    input, dist_attn_runtime_key = prepare_magi_attention(
+                tokens, cu_seqlens_q, cu_seqlens_k, pad_size, mpu.get_context_parallel_group()
+            )
+    input = torch.unsqueeze(input, dim=0)  # Megatron need batch_dim for input.
+    labels = torch.unsqueeze(labels, dim=0)
+    
+    # update batch
+    batch['tokens'] = input
+    batch['labels'] = labels
+    batch['key'] = dist_attn_runtime_key
+    batch['position_ids'] = get_position_ids(dist_attn_runtime_key)
+
+    return batch
 
 def get_batch(data_iterator):
     """Generate a batch."""
@@ -142,7 +232,8 @@ def get_batch(data_iterator):
     batch = get_batch_on_this_tp_rank(data_iterator)
 
     # slice batch along sequence dimension for context parallelism
-    batch = get_batch_on_this_cp_rank(batch)
+    # do dispatch here
+    batch = dispatch_along_cp_rank(batch)
 
     return batch.values()
 
@@ -171,9 +262,6 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
     total_tokens = loss_mask.sum()
     loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), total_tokens.view(1)])
 
-    if args.context_parallel_size > 1:
-        torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
-    
     # Check individual rank losses are not NaN prior to DP all-reduce.
     rerun_state_machine = get_rerun_state_machine()
     if args.check_for_nan_in_loss_and_grad:
@@ -212,21 +300,21 @@ def forward_step(data_iterator, model: GPTModel):
         data_iterator : Input data iterator
         model (GPTModel): The GPT Model
     """
-    args = get_args()
     timers = get_timers()
 
     # Get the batch.
     timers('batch-generator', log_level=2).start()
     global stimer
     with stimer(bdata=True):
-        tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
+        tokens, labels, loss_mask, attention_mask, position_ids, key = get_batch(
             data_iterator)
+
     timers('batch-generator').stop()
 
     with stimer:
         output_tensor = model(tokens, position_ids, attention_mask,
-                              labels=labels)
-
+                              labels=labels, magi_attention_key=key)
+    
     return output_tensor, partial(loss_func, loss_mask)
 
 
