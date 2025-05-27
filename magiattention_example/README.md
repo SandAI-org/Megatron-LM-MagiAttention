@@ -141,15 +141,18 @@ You can run `train_llama_1b_from_scratch.sh` to train the LLaMA-1B model from sc
 
 ### Training Settings
 
-- **Model Size**: LLaMA-1B
-  - **Number of Layers**: 16
-  - **Hidden Size**: 2048
-  - **Number of Attention Heads**: 32
-  - **Group Query Attention**: Yes
-  - **Number of Query Groups**: 8
-- **Sequence Length**: 8192
-- **Context Parallel Size**: cp1/2/4/8 (MagiAttention vs TE Ring Attention) with global batch size 16.
-- **Training Iterations**: 100000
+| **Configuration**                 | **Value**                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| **Dataset**                   | [OpenWebText](https://huggingface.co/datasets/Skylion007/openwebtext)                        |
+| **Model Size**                | LLaMA-1B                                                                                     |
+| **Number of Layers**          | 16                                                                                           |
+| **Hidden Size**               | 2048                                                                                         |
+| **Number of Attention Heads** | 32                                                                                           |
+| **Group Query Attention**     | Enabled                                                                                      |
+| **Number of Query Groups**    | 8                                                                                            |
+| **Sequence Length**           | 8192                                                                                         |
+| **Context Parallel Size**     | CP1/2/4/8 (MagiAttention vs. TE Ring Attention) with a global batch size of 16               |
+| **Training Iterations**       | 100,000                                                                                      |
 
 ### Results
 
