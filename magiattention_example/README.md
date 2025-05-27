@@ -1,6 +1,8 @@
 # Training LLaMA-3B with MagiAttention
 
-This repository provides an example of training the LLaMA-3B model using MagiAttention. Below are the steps to get started.
+This repository provides an example of training the LLaMA-3B model using MagiAttention based on [Megatron-LM v0.11.0](https://github.com/NVIDIA/Megatron-LM/tree/v0.11.0). 
+
+Below are the steps to get started.
 
 ## Prerequisites
 
