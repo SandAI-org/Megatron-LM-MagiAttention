@@ -1,4 +1,4 @@
-# Training LLaMA-3B with MagiAttention
+# Training LLaMA-3-1B with MagiAttention
 
 This repository provides an example of training the LLaMA-3B model using MagiAttention based on [Megatron-LM v0.11.0](https://github.com/NVIDIA/Megatron-LM/tree/v0.11.0). 
 
@@ -153,7 +153,7 @@ You can run `train_llama_1b_from_scratch.sh` to train the LLaMA-1B model from sc
 | **Group Query Attention**     | Enabled                                                                                      |
 | **Number of Query Groups**    | 8                                                                                            |
 | **Sequence Length**           | 8192                                                                                         |
-| **Context Parallel Size**     | CP1/2/4/8 (MagiAttention vs. TE Ring Attention) with a global batch size of 16               |
+| **Context Parallel Size**     | CP1/4/8 (MagiAttention vs. TE Ring Attention) with a global batch size of 16               |
 | **Training Iterations**       | 100,000                                                                                      |
 
 ### Results
