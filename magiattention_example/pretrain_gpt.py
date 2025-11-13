@@ -46,7 +46,7 @@ from magi_attention.config import (
 )
 from magi_attention.api import (
     compute_pad_size,
-    full_attention_to_varlen_attention,
+    infer_varlen_mask_from_batch,
     squash_batch_dim,
 )
 from magi_attention.dist_attn_runtime_mgr import DistAttnRuntimeKey
@@ -156,16 +156,37 @@ def prepare_data(input, label):
 
     # squash batch dim.
     input = squash_batch_dim(input)
-    pad_size, _ = compute_pad_size(input.size(0), args.context_parallel_size, head_dim)
+    pad_size = compute_pad_size(input.size(0), args.context_parallel_size, head_dim)
 
     label = squash_batch_dim(label)
 
-    cu_seqlens_q, cu_seqlens_k = full_attention_to_varlen_attention(
+    cu_seqlens_q, cu_seqlens_k = infer_varlen_mask_from_batch(
         micro_batch_size, seqlen
     )
     return input, label, cu_seqlens_q, cu_seqlens_k, pad_size
 
+
 def prepare_magi_attention(input, cu_seqlens_q, cu_seqlens_k, pad_size, cp_group):
+     # ---   magi_attn_flex_dispatch   --- #
+    dist_attn_config = DistAttnConfig()
+    #cp_group = self._build_cp_group()
+
+    #inputs = squash_batch_dim(input)
+
+    x_padded, dist_attn_runtime_key = magi_attn_varlen_dispatch(
+        input,
+        cu_seqlens_q,
+        cu_seqlens_k,
+        chunk_size=512,
+        pad_size=pad_size,
+        cp_group_or_mesh=cp_group,
+        causal=True,
+        dist_attn_config=dist_attn_config,
+    )
+    x_padded = x_padded.unsqueeze(0)
+
+    return x_padded, dist_attn_runtime_key
+    '''
     dist_attn_config = DistAttnConfig(
         dispatch_config=DispatchConfig(alg=MinHeapDispatchAlg()),
         overlap_config=OverlapConfig(
@@ -198,7 +219,7 @@ def prepare_magi_attention(input, cu_seqlens_q, cu_seqlens_k, pad_size, cp_group
         causal=True,
         dist_attn_config=dist_attn_config,
     )
-
+    '''
     return x_padded, dist_attn_runtime_key
 
 def dispatch_along_cp_rank(batch: Dict[str, Any]):
@@ -210,9 +231,9 @@ def dispatch_along_cp_rank(batch: Dict[str, Any]):
     input, dist_attn_runtime_key = prepare_magi_attention(
                 tokens, cu_seqlens_q, cu_seqlens_k, pad_size, mpu.get_context_parallel_group()
             )
-    input = torch.unsqueeze(input, dim=0)  # Megatron need batch_dim for input.
+    #input = torch.unsqueeze(input, dim=0)  # Megatron need batch_dim for input.
     labels = torch.unsqueeze(labels, dim=0)
-    
+
     # update batch
     batch['tokens'] = input
     batch['labels'] = labels
