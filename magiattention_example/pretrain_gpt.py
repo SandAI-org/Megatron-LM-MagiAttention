@@ -35,20 +35,16 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,
 )
-from magi_attention.api import magi_attn_varlen_dispatch, undispatch, get_position_ids
-from magi_attention.common.enum import AttnOverlapMode
-from magi_attention.config import (
-    DispatchConfig,
-    DistAttnConfig,
-    MinHeapDispatchAlg,
-    OverlapConfig,
-    UniformOverlapAlg,
-)
 from magi_attention.api import (
+    magi_attn_varlen_dispatch, 
+    undispatch, 
+    get_position_ids, 
     compute_pad_size,
     infer_varlen_mask_from_batch,
     squash_batch_dim,
+    DistAttnConfig
 )
+
 from magi_attention.dist_attn_runtime_mgr import DistAttnRuntimeKey
 
 
@@ -169,9 +165,6 @@ def prepare_data(input, label):
 def prepare_magi_attention(input, cu_seqlens_q, cu_seqlens_k, pad_size, cp_group):
      # ---   magi_attn_flex_dispatch   --- #
     dist_attn_config = DistAttnConfig()
-    #cp_group = self._build_cp_group()
-
-    #inputs = squash_batch_dim(input)
 
     x_padded, dist_attn_runtime_key = magi_attn_varlen_dispatch(
         input,
@@ -185,41 +178,6 @@ def prepare_magi_attention(input, cu_seqlens_q, cu_seqlens_k, pad_size, cp_group
     )
     x_padded = x_padded.unsqueeze(0)
 
-    return x_padded, dist_attn_runtime_key
-    '''
-    dist_attn_config = DistAttnConfig(
-        dispatch_config=DispatchConfig(alg=MinHeapDispatchAlg()),
-        overlap_config=OverlapConfig(
-            enable=True,
-            mode=AttnOverlapMode.STATIC,
-            degree=4,
-            min_chunk_size=13,
-            max_num_chunks=52,
-            alg=UniformOverlapAlg(
-                random_costs=True,
-                random_seed=42,
-            ),
-        ),
-        high_bandwith_domain_size=8,
-        deterministic=False,
-    )
-
-    args = get_args()
-    config = core_transformer_config_from_args(args)
-    
-    head_dim = config.hidden_size // config.num_attention_heads
-    # dispatch input data to each rank and get key.
-    x_padded, dist_attn_runtime_key = magi_attn_varlen_dispatch(
-        input,
-        cu_seqlens_q,
-        cu_seqlens_k,
-        head_dim=head_dim,
-        pad_size=pad_size,
-        cp_group=cp_group,
-        causal=True,
-        dist_attn_config=dist_attn_config,
-    )
-    '''
     return x_padded, dist_attn_runtime_key
 
 def dispatch_along_cp_rank(batch: Dict[str, Any]):
