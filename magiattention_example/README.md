@@ -33,41 +33,70 @@ cd data/
 We have integrated MagiAttention with `transformer_engine` and the local transformer implementation. The main changes are as follows:
 
 1. **Modify `pretrain_gpt.py`**:
-   - Update the `get_batch` function to use `dispatch_along_cp_rank`.
-   - Add the `prepare_data` and `prepare_magi_attention` functions.
+   - Update the `get_batch` function to use `dispatch_along_cp_rank` instead of `get_batch_on_this_cp_rank`.
+   - Add the `prepare_data`, `prepare_magi_attention`, and `dispatch_along_cp_rank` functions.
+   - Scale loss by `context_parallel_size` in `loss_func`.
 
    ```diff
    def get_batch(data_iterator):
        """Generate a batch."""
+       ...
        batch = get_batch_on_this_tp_rank(data_iterator)
    -   batch = get_batch_on_this_cp_rank(batch)
    +   batch = dispatch_along_cp_rank(batch)
        return batch.values()
 
-   + def dispatch_along_cp_rank(batch: Dict[str, Any]):
-       ...
-       # squash batch dim for token and label and compute pad_size
-   +   tokens, labels, cu_seqlens_q, cu_seqlens_k, pad_size = prepare_data(tokens, labels)
-   +   input, dist_attn_runtime_key = prepare_magi_attention(
-   +       tokens, cu_seqlens_q, cu_seqlens_k, pad_size, mpu.get_context_parallel_group())
-       # update dict key
-       ...
-       return batch
+   + def prepare_data(input, label):
+   +     args = get_args()
+   +     config = core_transformer_config_from_args(args)
+   +     head_dim = config.hidden_size // config.num_attention_heads
+   +     micro_batch_size = input.size(0)
+   +     seqlen = input.size(1)
+   +     input = squash_batch_dim(input)
+   +     pad_size = compute_pad_size(input.size(0), args.context_parallel_size, head_dim)
+   +     label = squash_batch_dim(label)
+   +     cu_seqlens_q, cu_seqlens_k = infer_varlen_mask_from_batch(
+   +         micro_batch_size, seqlen
+   +     )
+   +     return input, label, cu_seqlens_q, cu_seqlens_k, pad_size
 
    + def prepare_magi_attention(input, cu_seqlens_q, cu_seqlens_k, pad_size, cp_group):
-   +   dist_attn_config = DistAttnConfig()
-   +   ...
-   +   x_padded, dist_attn_runtime_key = magi_attn_varlen_dispatch(
-   +       input,
-   +       cu_seqlens_q,
-   +       cu_seqlens_k,
-   +       head_dim=head_dim,
-   +       pad_size=pad_size,
-   +       cp_group=cp_group,
-   +       causal=True,
-   +       dist_attn_config=dist_attn_config,
-   +   )
-   +   return x_padded, dist_attn_runtime_key
+   +     args = get_args()
+   +     config = core_transformer_config_from_args(args)
+   +     num_heads_q = config.num_attention_heads
+   +     num_heads_kv = config.num_query_groups if config.num_query_groups is not None else config.num_attention_heads
+   +     head_dim = config.hidden_size // config.num_attention_heads
+   +     dist_attn_config = DistAttnConfig()
+   +     dist_attn_runtime_key = magi_attn_varlen_key(
+   +         cu_seqlens_q=cu_seqlens_q,
+   +         cu_seqlens_k=cu_seqlens_k,
+   +         num_heads_q=num_heads_q,
+   +         num_heads_kv=num_heads_kv,
+   +         head_dim=head_dim,
+   +         chunk_size=512,
+   +         pad_size=pad_size,
+   +         cp_group_or_mesh=cp_group,
+   +         causal=True,
+   +         dist_attn_config=dist_attn_config,
+   +     )
+   +     x_padded = dispatch(input, dist_attn_runtime_key)
+   +     x_padded = x_padded.unsqueeze(0)
+   +     return x_padded, dist_attn_runtime_key
+
+   + def dispatch_along_cp_rank(batch: Dict[str, Any]):
+   +     """slice data along sequence dimension for context parallelisms
+   +        and prepare magiattention key."""
+   +     tokens = batch['tokens']
+   +     labels = batch['labels']
+   +     tokens, labels, cu_seqlens_q, cu_seqlens_k, pad_size = prepare_data(tokens, labels)
+   +     input, dist_attn_runtime_key = prepare_magi_attention(
+   +         tokens, cu_seqlens_q, cu_seqlens_k, pad_size, mpu.get_context_parallel_group())
+   +     labels = torch.unsqueeze(labels, dim=0)
+   +     batch['tokens'] = input
+   +     batch['labels'] = labels
+   +     batch['key'] = dist_attn_runtime_key
+   +     batch['position_ids'] = get_position_ids(dist_attn_runtime_key)
+   +     return batch
 
    def forward_step(data_iterator, model: GPTModel):
        ...
@@ -83,6 +112,11 @@ We have integrated MagiAttention with `transformer_engine` and the local transfo
    +   output_tensor = model(tokens, position_ids, attention_mask,
    +                        labels=labels, magi_attention_key=key)
        return output_tensor, partial(loss_func, loss_mask)
+
+   def loss_func(loss_mask, output_tensor):
+       ...
+   -   return (loss[0], ...)
+   +   return (loss[0] * args.context_parallel_size, ...)
    ```
 
 2. **Add `magi_attention.py`**:
