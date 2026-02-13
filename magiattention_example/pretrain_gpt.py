@@ -36,7 +36,8 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
 from magi_attention.api import (
-    magi_attn_varlen_dispatch, 
+    magi_attn_varlen_key,
+    dispatch,
     undispatch, 
     get_position_ids, 
     compute_pad_size,
@@ -164,18 +165,27 @@ def prepare_data(input, label):
 
 def prepare_magi_attention(input, cu_seqlens_q, cu_seqlens_k, pad_size, cp_group):
      # ---   magi_attn_flex_dispatch   --- #
+    args = get_args()
+    config = core_transformer_config_from_args(args)
+    num_heads_q = config.num_attention_heads
+    num_heads_kv = config.num_query_groups if config.num_query_groups is not None else config.num_attention_heads
+    head_dim = config.hidden_size // config.num_attention_heads
+
     dist_attn_config = DistAttnConfig()
 
-    x_padded, dist_attn_runtime_key = magi_attn_varlen_dispatch(
-        input,
-        cu_seqlens_q,
-        cu_seqlens_k,
+    dist_attn_runtime_key = magi_attn_varlen_key(
+        cu_seqlens_q=cu_seqlens_q,
+        cu_seqlens_k=cu_seqlens_k,
+        num_heads_q=num_heads_q,
+        num_heads_kv=num_heads_kv,
+        head_dim=head_dim,
         chunk_size=512,
         pad_size=pad_size,
         cp_group_or_mesh=cp_group,
         causal=True,
         dist_attn_config=dist_attn_config,
     )
+    x_padded = dispatch(input, dist_attn_runtime_key)
     x_padded = x_padded.unsqueeze(0)
 
     return x_padded, dist_attn_runtime_key

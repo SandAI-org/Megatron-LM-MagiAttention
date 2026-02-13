@@ -1,6 +1,7 @@
 #!/bin/bash
 
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export MAGI_ATTENTION_FORCE_JIT_BUILD=1
 
 [ -z "$RANK" ] && RANK=0
 [ -z "$WORLD_SIZE" ] && WORLD_SIZE=1
