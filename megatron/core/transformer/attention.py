@@ -347,6 +347,7 @@ class Attention(MegatronModule, ABC):
         attention_bias=None,
         packed_seq_params=None,
         sequence_len_offset=None,
+        magi_attention_key=None,
     ):
         """
         Perform a forward pass through the attention module.
@@ -466,6 +467,7 @@ class Attention(MegatronModule, ABC):
                 attn_mask_type=attn_mask_type,
                 attention_bias=attention_bias,
                 packed_seq_params=packed_seq_params,
+                magi_attention_key=magi_attention_key,
             )
 
         if packed_seq_params is not None and packed_seq_params.qkv_format == 'thd':

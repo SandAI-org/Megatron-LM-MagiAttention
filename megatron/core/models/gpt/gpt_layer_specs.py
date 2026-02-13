@@ -8,6 +8,7 @@ from megatron.core.models.gpt.moe_module_specs import get_moe_module_spec
 from megatron.core.tensor_parallel.layers import ColumnParallelLinear, RowParallelLinear
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
 from megatron.core.transformer.dot_product_attention import DotProductAttention
+from megatron.core.transformer.magi_attention import MagiAttention
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.identity_op import IdentityOp
 from megatron.core.transformer.mlp import MLP, MLPSubmodules
@@ -224,7 +225,7 @@ def get_gpt_layer_local_spec(
                     params={"attn_mask_type": AttnMaskType.causal},
                     submodules=SelfAttentionSubmodules(
                         linear_qkv=ColumnParallelLinear,
-                        core_attention=DotProductAttention,
+                        core_attention=MagiAttention,
                         linear_proj=RowParallelLinear,
                         q_layernorm=LNImpl if qk_layernorm else IdentityOp,
                         k_layernorm=LNImpl if qk_layernorm else IdentityOp,

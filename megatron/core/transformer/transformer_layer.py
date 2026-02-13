@@ -16,6 +16,7 @@ from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import make_viewless_tensor
+from magi_attention.dist_attn_runtime_mgr import DistAttnRuntimeKey
 
 
 def get_transformer_layer_offset(config: TransformerConfig):
@@ -355,6 +356,7 @@ class TransformerLayer(MegatronModule, BaseTransformerLayer):
         inference_params=None,
         packed_seq_params=None,
         sequence_len_offset=None,
+        magi_attention_key: DistAttnRuntimeKey = None,
     ):
         """
         Perform a forward pass through the transformer layer.
@@ -379,7 +381,6 @@ class TransformerLayer(MegatronModule, BaseTransformerLayer):
                 context (Tensor): Updated context tensor if cross-attention is used,
                 otherwise None.
         """
-
         # Residual connection.
         residual = hidden_states
 
@@ -397,6 +398,7 @@ class TransformerLayer(MegatronModule, BaseTransformerLayer):
             attention_bias=attention_bias,
             packed_seq_params=packed_seq_params,
             sequence_len_offset=sequence_len_offset,
+            magi_attention_key=magi_attention_key,
         )
 
         # TODO: could we move `bias_dropout_add_exec_handler` itself

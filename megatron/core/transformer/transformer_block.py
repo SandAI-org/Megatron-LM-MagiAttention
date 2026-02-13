@@ -18,6 +18,7 @@ from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.transformer_layer import BaseTransformerLayer, TransformerLayer
 from megatron.core.transformer.utils import sharded_state_dict_default
 from megatron.core.utils import is_te_min_version, make_viewless_tensor
+from magi_attention.dist_attn_runtime_mgr import DistAttnRuntimeKey
 
 try:
     from megatron.core.extensions.transformer_engine import (
@@ -445,6 +446,7 @@ class TransformerBlock(MegatronModule):
         inference_params: InferenceParams = None,
         packed_seq_params: PackedSeqParams = None,
         sequence_len_offset: Tensor = None,
+        magi_attention_key: DistAttnRuntimeKey = None,
     ):
         """
         Perform the forward pass through the transformer block.
@@ -558,6 +560,7 @@ class TransformerBlock(MegatronModule):
                                 inference_params=inference_params,
                                 packed_seq_params=packed_seq_params,
                                 sequence_len_offset=sequence_len_offset,
+                                magi_attention_key=magi_attention_key,
                             )
                         else:
                             # CUDA graph replay for layer `l_no` and microbatch

@@ -13,6 +13,7 @@ from packaging.version import Version as PkgVersion
 from torch import Tensor
 from torch.nn.parameter import Parameter
 
+from megatron.core.transformer.magi_attention import MagiAttention
 from megatron.core.dist_checkpointing.utils import replace_prefix_for_sharding
 from megatron.core.model_parallel_config import ModelParallelConfig
 from megatron.core.packed_seq_params import PackedSeqParams
@@ -41,6 +42,7 @@ from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.utils import make_sharded_tensors_for_checkpoint
 from megatron.core.utils import get_te_version, is_te_min_version
+from magi_attention.dist_attn_runtime_mgr import DistAttnRuntimeKey
 
 
 def _get_extra_te_kwargs(config: TransformerConfig):
@@ -628,7 +630,7 @@ class TEDotProductAttention(te.pytorch.DotProductAttention):
         self.config = config
         self.te_forward_mask_type = False
         self.qkv_format: str = 'sbhd'
-
+        
         if self.config.apply_query_key_layer_scaling != bool(
             int(os.getenv('NVTE_APPLY_QK_LAYER_SCALING', '0'))
         ):
@@ -745,6 +747,12 @@ class TEDotProductAttention(te.pytorch.DotProductAttention):
             layer_number=layer_number,
             **extra_kwargs,
         )
+        self.magi_attention = MagiAttention(config=config, 
+                                            layer_number=layer_number,
+                                            attn_mask_type=attn_mask_type,
+                                            attention_type=attention_type,
+                                            attention_dropout=attention_dropout,
+                                            softmax_scale=softmax_scale)
 
     def forward(
         self,
@@ -755,7 +763,11 @@ class TEDotProductAttention(te.pytorch.DotProductAttention):
         attn_mask_type: AttnMaskType,
         attention_bias: Tensor = None,
         packed_seq_params: PackedSeqParams = None,
+        magi_attention_key: DistAttnRuntimeKey = None,
     ):
+        core_attn_out = self.magi_attention.forward(query=query, key=key, value=value, attention_mask=attention_mask, attention_bias=attention_bias, packed_seq_params=None, magi_attention_key=magi_attention_key)
+        return core_attn_out
+        '''
         """Forward."""
         packed_seq_kwargs = (
             {key: getattr(packed_seq_params, key) for key in self.kept_packed_seq_params}
@@ -819,7 +831,7 @@ class TEDotProductAttention(te.pytorch.DotProductAttention):
             return core_attn_out.transpose(0, 1)
         else:
             return core_attn_out
-
+        '''
 
 if is_te_min_version("1.9.0.dev0"):
 
